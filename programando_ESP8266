@@ -1,0 +1,111 @@
+#include <ESP8266WiFi.h>  //Incluindo biblioteca WiFi da placa ESP8266
+#include "Adafruit_MQTT.h"  //Incluindo bibliotecas do Adafruit
+#include "Adafruit_MQTT_Client.h" //Incluindo bibliotecas do Adafruit
+#include <DHT.h>//  //Incluindo biblioteca DHT
+#define PORTAD1            5  //Declarando o porta d1 (pino 5) da placa WiFi
+#define PORTAD2            4  //Declarando o porta d2 (pino 4) da placa WiFi
+#define PORTAD0            16  //Declarando o porta d4 (pino 2) da placa WiFi
+#define WLAN_SSID       "FrutuososFamily_2.4GHz"             // Inserindo SSID do WiFi (Nome da rede)
+#define WLAN_PASS       "linda2205"        // Senha da rede
+
+/************************* Conexão Servidor Adafruit.io *********************************/
+
+#define AIO_SERVER      "io.adafruit.com" //Endereço do servidor Adafruit
+#define AIO_SERVERPORT  1883                   // Porta do servidor - (usar 8883 para SSL)
+#define AIO_USERNAME  "frutuosofernando"  //Nome de usuário do site Adafruit
+#define AIO_KEY       "aio_aEVO51WCDXnXykobGEHSFwwN4N72"   // Project Auth Key gerada na Adafruit
+
+/************ Conexão servidor MQTT ******************/
+
+WiFiClient client;  // Criando um Cliente WiFi para conectar ao servidor MQTT. //Usar WiFiFlientSecure para SSL //WiFiClientSecure client;
+Adafruit_MQTT_Client mqtt(&client, AIO_SERVER, AIO_SERVERPORT, AIO_USERNAME, AIO_KEY);  //Configurando a classe do cliente MQTT passando o cliente WiFi, o servidor MQTT e os detalhes de login.
+
+/****************************** Conexão com "FEED"/Projeto do Adafruit ***************************************/
+
+Adafruit_MQTT_Subscribe Light1 = Adafruit_MQTT_Subscribe(&mqtt, AIO_USERNAME "/feeds/d1"); // Feed criado para a porta D1
+Adafruit_MQTT_Subscribe Light2 = Adafruit_MQTT_Subscribe(&mqtt, AIO_USERNAME "/feeds/d2"); // Feed criado para a porta D2
+Adafruit_MQTT_Subscribe Light3 = Adafruit_MQTT_Subscribe(&mqtt, AIO_USERNAME "/feeds/d0"); // Feed criado para a porta D0
+
+void MQTT_connect();
+
+void setup() {
+  
+  Serial.begin(115200); //Iniciando serial para exibir infromaçães ao usuário
+  pinMode(PORTAD1, OUTPUT);  //Definindo PORTAD1 como saída
+  pinMode(PORTAD2, OUTPUT);  //Definindo PORTAD2 como saída
+  pinMode(PORTAD0, OUTPUT);  //Definindo PORTAD3 como saída
+  
+  Serial.println(); Serial.println();
+  Serial.print("Connecting to ");
+  Serial.println(WLAN_SSID); //Exibir a rede que estamos conectando
+  WiFi.begin(WLAN_SSID, WLAN_PASS); //Iniciando WiFi com as credencias da rede
+  
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");//Exibir "." enquando não for estabelecida a conexão
+  }
+  
+  Serial.println();
+  Serial.println("WiFi connected");
+  Serial.println("IP address: "); 
+  Serial.println(WiFi.localIP()); //Exibir endereço de IP da rede WiFi conectada
+  mqtt.subscribe(&Light1); //Configurando assinatura MQTT para o FEED
+  mqtt.subscribe(&Light2); //Configurando assinatura MQTT para o FEED
+  mqtt.subscribe(&Light3); //Configurando assinatura MQTT para o FEED
+}
+
+void loop() {
+ 
+  MQTT_connect();
+  
+  
+  Adafruit_MQTT_Subscribe *subscription;
+  
+  while ((subscription = mqtt.readSubscription(20000))) {
+    if (subscription == &Light1) {
+      Serial.print(F("Got: "));
+      Serial.println((char *)Light1.lastread);
+      int Light1_State = atoi((char *)Light1.lastread);
+      digitalWrite(PORTAD1, !Light1_State);
+    }
+    if (subscription == &Light2) {
+      Serial.print(F("Got: "));
+      Serial.println((char *)Light2.lastread);
+      int Light2_State = atoi((char *)Light2.lastread);
+      digitalWrite(PORTAD2, !Light2_State);
+    }
+    if (subscription == &Light3) {
+      Serial.print(F("Got: "));
+      Serial.println((char *)Light3.lastread);
+      int Light3_State = atoi((char *)Light3.lastread);
+      digitalWrite(PORTAD0, !Light3_State);
+    }
+  }
+}
+
+void MQTT_connect() {
+  int8_t ret;
+
+  // Stop if already connected.
+  if (mqtt.connected()) {
+    return;
+  }
+
+  Serial.print("Connecting to MQTT... ");
+
+  uint8_t retries = 3;
+  
+  while ((ret = mqtt.connect()) != 0) { // connect will return 0 for connected
+    Serial.println(mqtt.connectErrorString(ret));
+    Serial.println("Retrying MQTT connection in 5 seconds...");
+    mqtt.disconnect();
+    delay(5000);
+    retries--;
+    if (retries == 0) {
+      // basically die and wait for WDT to reset me
+      while (1);
+    }
+  }
+  Serial.println("MQTT Connected!");
+  
+}
